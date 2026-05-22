@@ -9,7 +9,7 @@ const app = express();
 app.use(cors({
   origin: [
     'http://localhost:3000',
-    'https://your-netlify-site.netlify.app'
+    'https://dipanshu-expense-tracker.netlify.app'
   ],
   credentials: true
 }));
