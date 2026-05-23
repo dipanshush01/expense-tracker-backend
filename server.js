@@ -6,28 +6,29 @@ const jwt = require('jsonwebtoken');
 require('dotenv').config();
 
 const app = express();
+
+// ── CORS — Allow All Origins ──────────────────────────
 app.use(cors({
-  origin: [
-    'http://localhost:3000',
-    'https://dipanshu-expense-tracker.netlify.app'
-  ],
-  credentials: true
+  origin: '*',
+  methods: ['GET', 'POST', 'DELETE', 'PUT', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
 }));
+
 app.use(express.json());
 
-// Connect to MongoDB
+// ── Connect to MongoDB ────────────────────────────────
 mongoose.connect(process.env.MONGO_URI)
   .then(() => console.log('MongoDB Connected!'))
   .catch(err => console.log('DB Error:', err));
 
-// ── User Schema ──────────────────────────────────────
+// ── User Schema ───────────────────────────────────────
 const userSchema = new mongoose.Schema({
   username: { type: String, required: true, unique: true },
   password: { type: String, required: true },
 });
 const User = mongoose.model('User', userSchema);
 
-// ── Transaction Schema ───────────────────────────────
+// ── Transaction Schema ────────────────────────────────
 const txSchema = new mongoose.Schema({
   userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   desc:   String,
@@ -38,7 +39,7 @@ const txSchema = new mongoose.Schema({
 }, { timestamps: true });
 const Transaction = mongoose.model('Transaction', txSchema);
 
-// ── Auth Middleware ──────────────────────────────────
+// ── Auth Middleware ───────────────────────────────────
 function auth(req, res, next) {
   const token = req.headers.authorization?.split(' ')[1];
   if (!token) return res.status(401).json({ error: 'No token' });
@@ -50,7 +51,12 @@ function auth(req, res, next) {
   }
 }
 
-// ── Register ─────────────────────────────────────────
+// ── Test Route ────────────────────────────────────────
+app.get('/', (req, res) => {
+  res.json({ message: 'Expense Tracker Backend is Running!' });
+});
+
+// ── Register ──────────────────────────────────────────
 app.post('/api/register', async (req, res) => {
   try {
     const { username, password } = req.body;
@@ -58,14 +64,18 @@ app.post('/api/register', async (req, res) => {
     if (exists) return res.status(400).json({ error: 'Username already taken' });
     const hashed = await bcrypt.hash(password, 10);
     const user = await User.create({ username, password: hashed });
-    const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: '7d' });
+    const token = jwt.sign(
+      { id: user._id },
+      process.env.JWT_SECRET,
+      { expiresIn: '7d' }
+    );
     res.json({ token, username });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
 });
 
-// ── Login ────────────────────────────────────────────
+// ── Login ─────────────────────────────────────────────
 app.post('/api/login', async (req, res) => {
   try {
     const { username, password } = req.body;
@@ -73,38 +83,56 @@ app.post('/api/login', async (req, res) => {
     if (!user) return res.status(400).json({ error: 'User not found' });
     const match = await bcrypt.compare(password, user.password);
     if (!match) return res.status(400).json({ error: 'Wrong password' });
-    const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: '7d' });
+    const token = jwt.sign(
+      { id: user._id },
+      process.env.JWT_SECRET,
+      { expiresIn: '7d' }
+    );
     res.json({ token, username });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
 });
 
-// ── Get Transactions ─────────────────────────────────
+// ── Get All Transactions ──────────────────────────────
 app.get('/api/transactions', auth, async (req, res) => {
-  const txs = await Transaction.find({ userId: req.user.id })
-    .sort({ createdAt: -1 });
-  res.json(txs);
+  try {
+    const txs = await Transaction.find({ userId: req.user.id })
+      .sort({ createdAt: -1 });
+    res.json(txs);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
 // ── Add Transaction ───────────────────────────────────
 app.post('/api/transactions', auth, async (req, res) => {
-  const tx = await Transaction.create({
-    ...req.body,
-    userId: req.user.id
-  });
-  res.json(tx);
+  try {
+    const tx = await Transaction.create({
+      ...req.body,
+      userId: req.user.id
+    });
+    res.json(tx);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
 // ── Delete Transaction ────────────────────────────────
 app.delete('/api/transactions/:id', auth, async (req, res) => {
-  await Transaction.deleteOne({
-    _id: req.params.id,
-    userId: req.user.id
-  });
-  res.json({ success: true });
+  try {
+    await Transaction.deleteOne({
+      _id: req.params.id,
+      userId: req.user.id
+    });
+    res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
-app.listen(process.env.PORT || 5000, () => {
-  console.log('Server running on port', process.env.PORT || 5000);
+// ── Start Server ──────────────────────────────────────
+const PORT = process.env.PORT || 5000;
+app.listen(PORT, () => {
+  console.log('Server running on port', PORT);
 });
